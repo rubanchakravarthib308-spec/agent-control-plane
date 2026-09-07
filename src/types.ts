@@ -23,10 +23,19 @@ export interface VerificationResult {
   reason: string;
 }
 
+export interface ApprovalRequest {
+  step: PlanStep;
+  fingerprint: string;
+  requiredCapability: string;
+}
+
 export interface ApprovalDecision {
   approved: boolean;
   reviewer: string;
   note?: string;
+  fingerprint?: string;
+  expiresAt?: string;
+  capabilities?: string[];
 }
 
 export type AuditEventType =
