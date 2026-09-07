@@ -2,6 +2,12 @@ import postgres, { type Sql } from "postgres";
 import type { ApprovalDecision, AuditEvent, PlanStep, VerificationResult } from "./types.js";
 import type { RunRecord, RunStatus, RunStore, StepRecord, StepStatus } from "./run-store.js";
 
+type SqlJsonValue = Parameters<Sql["json"]>[0];
+
+function toSqlJson(value: unknown): SqlJsonValue {
+  return JSON.parse(JSON.stringify(value ?? null)) as SqlJsonValue;
+}
+
 export class PostgresRunStore implements RunStore {
   private readonly sql: Sql;
 
@@ -23,7 +29,7 @@ export class PostgresRunStore implements RunStore {
         const step = steps[order]!;
         await tx`
           insert into agent_run_steps (run_id, step_id, step_order, action, tool, input, risk, status)
-          values (${runId}, ${step.id}, ${order}, ${step.action}, ${step.tool}, ${tx.json(step.input)}, ${step.risk}, 'planned')
+          values (${runId}, ${step.id}, ${order}, ${step.action}, ${step.tool}, ${tx.json(toSqlJson(step.input))}, ${step.risk}, 'planned')
         `;
       }
     });
@@ -36,7 +42,7 @@ export class PostgresRunStore implements RunStore {
   async recordApproval(runId: string, stepId: string, approval: ApprovalDecision): Promise<void> {
     await this.sql`
       update agent_run_steps
-      set approval = ${this.sql.json(approval)}
+      set approval = ${this.sql.json(toSqlJson(approval))}
       where run_id = ${runId} and step_id = ${stepId}
     `;
   }
@@ -44,7 +50,7 @@ export class PostgresRunStore implements RunStore {
   async recordExecution(runId: string, stepId: string, output: unknown): Promise<void> {
     await this.sql`
       update agent_run_steps
-      set output = ${this.sql.json(output)}
+      set output = ${this.sql.json(toSqlJson(output))}
       where run_id = ${runId} and step_id = ${stepId}
     `;
   }
@@ -52,7 +58,7 @@ export class PostgresRunStore implements RunStore {
   async recordVerification(runId: string, stepId: string, verification: VerificationResult): Promise<void> {
     await this.sql`
       update agent_run_steps
-      set verification = ${this.sql.json(verification)}
+      set verification = ${this.sql.json(toSqlJson(verification))}
       where run_id = ${runId} and step_id = ${stepId}
     `;
   }
@@ -60,7 +66,7 @@ export class PostgresRunStore implements RunStore {
   async appendAudit(runId: string, event: AuditEvent): Promise<void> {
     await this.sql`
       insert into agent_audit_events (run_id, occurred_at, event_type, message, metadata)
-      values (${runId}, ${event.at}, ${event.type}, ${event.message}, ${this.sql.json(event.metadata ?? {})})
+      values (${runId}, ${event.at}, ${event.type}, ${event.message}, ${this.sql.json(toSqlJson(event.metadata ?? {}))})
     `;
   }
 
