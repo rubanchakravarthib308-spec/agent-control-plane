@@ -1,10 +1,12 @@
 import type {
   AgentGoal,
   ApprovalDecision,
+  ApprovalRequest,
   AuditEvent,
   PlanStep,
   VerificationResult,
 } from "./types.js";
+import { approvalRequest, validateApproval } from "./approval-policy.js";
 import { InMemoryRunStore } from "./memory-run-store.js";
 import type { RunStore, StepStatus } from "./run-store.js";
 import { ToolRegistry } from "./tool-registry.js";
@@ -13,7 +15,7 @@ export interface ControlPlaneDeps {
   registry: ToolRegistry;
   planner: (goal: AgentGoal) => Promise<PlanStep[]>;
   verify: (step: PlanStep, output: unknown) => Promise<VerificationResult>;
-  approve: (step: PlanStep) => Promise<ApprovalDecision>;
+  approve: (request: ApprovalRequest) => Promise<ApprovalDecision>;
   store?: RunStore;
   now?: () => Date;
 }
@@ -60,17 +62,37 @@ export class AgentControlPlane {
 
       for (const step of plan) {
         if (step.risk === "high") {
+          const request = approvalRequest(step);
           await stepStatus(step.id, "awaiting_approval");
-          await log("APPROVAL_REQUESTED", `Approval required for ${step.action}`, { stepId: step.id });
-          const decision = await this.deps.approve(step);
+          await log("APPROVAL_REQUESTED", `Approval required for ${step.action}`, {
+            stepId: step.id,
+            fingerprint: request.fingerprint,
+            requiredCapability: request.requiredCapability,
+          });
+
+          const decision = await this.deps.approve(request);
           await this.store.recordApproval(runId, step.id, decision);
-          if (!decision.approved) {
+          const validation = validateApproval(request, decision, now());
+
+          if (!validation.valid) {
             await stepStatus(step.id, "blocked");
-            await log("APPROVAL_DENIED", decision.note ?? "Human reviewer denied the action", { reviewer: decision.reviewer, stepId: step.id });
+            await log("APPROVAL_DENIED", validation.reason, {
+              reviewer: decision.reviewer,
+              stepId: step.id,
+              fingerprint: request.fingerprint,
+              requiredCapability: request.requiredCapability,
+            });
             return finish("blocked");
           }
+
           await stepStatus(step.id, "approved");
-          await log("APPROVAL_GRANTED", decision.note ?? "Human reviewer approved the action", { reviewer: decision.reviewer, stepId: step.id });
+          await log("APPROVAL_GRANTED", decision.note ?? "Human reviewer approved the exact scoped action", {
+            reviewer: decision.reviewer,
+            stepId: step.id,
+            fingerprint: request.fingerprint,
+            expiresAt: decision.expiresAt,
+            capabilities: decision.capabilities,
+          });
         }
 
         const idempotencyKey = `${runId}:${step.id}`;

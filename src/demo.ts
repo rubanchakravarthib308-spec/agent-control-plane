@@ -29,10 +29,13 @@ const controlPlane = new AgentControlPlane({
       risk: "high",
     },
   ],
-  approve: async (step) => ({
+  approve: async (request) => ({
     approved: true,
     reviewer: "demo-human-reviewer",
-    note: `Approved ${step.action} in demo mode`,
+    note: `Approved ${request.step.action} in demo mode`,
+    fingerprint: request.fingerprint,
+    expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    capabilities: [request.requiredCapability],
   }),
   verify: async (_step, output) => ({
     passed: output !== undefined,
