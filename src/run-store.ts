@@ -41,6 +41,7 @@ export interface RunStore {
   savePlan(runId: string, steps: PlanStep[]): Promise<void>;
   setStepStatus(runId: string, stepId: string, status: StepStatus): Promise<void>;
   recordApproval(runId: string, stepId: string, approval: ApprovalDecision): Promise<void>;
+  claimExecution(idempotencyKey: string, runId: string, stepId: string, claimedAt: string): Promise<boolean>;
   recordExecution(runId: string, stepId: string, output: unknown): Promise<void>;
   recordVerification(runId: string, stepId: string, verification: VerificationResult): Promise<void>;
   appendAudit(runId: string, event: AuditEvent): Promise<void>;
