@@ -49,6 +49,9 @@ export function validateApproval(
   if (!decision.capabilities?.includes(request.requiredCapability)) {
     return { valid: false, reason: `Approval does not grant capability: ${request.requiredCapability}` };
   }
+  if (decision.capabilities.length !== 1) {
+    return { valid: false, reason: "Approval grants capabilities beyond the exact planned action" };
+  }
 
   return { valid: true };
 }
