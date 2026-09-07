@@ -36,18 +36,9 @@ export class AgentControlPlane {
     const now = this.deps.now ?? (() => new Date());
     const runId = goal.id;
 
-    await this.store.createRun({
-      id: runId,
-      goal,
-      status: "running",
-      createdAt: now().toISOString(),
-    });
+    await this.store.createRun({ id: runId, goal, status: "running", createdAt: now().toISOString() });
 
-    const log = async (
-      type: AuditEvent["type"],
-      message: string,
-      metadata?: Record<string, unknown>,
-    ) => {
+    const log = async (type: AuditEvent["type"], message: string, metadata?: Record<string, unknown>) => {
       const event: AuditEvent = { at: now().toISOString(), type, message, metadata };
       audit.push(event);
       await this.store.appendAudit(runId, event);
@@ -58,9 +49,7 @@ export class AgentControlPlane {
       return { runId, status, audit };
     };
 
-    const stepStatus = async (stepId: string, status: StepStatus) => {
-      await this.store.setStepStatus(runId, stepId, status);
-    };
+    const stepStatus = async (stepId: string, status: StepStatus) => this.store.setStepStatus(runId, stepId, status);
 
     await log("GOAL_RECEIVED", goal.objective, { goalId: goal.id, runId });
 
@@ -75,28 +64,28 @@ export class AgentControlPlane {
           await log("APPROVAL_REQUESTED", `Approval required for ${step.action}`, { stepId: step.id });
           const decision = await this.deps.approve(step);
           await this.store.recordApproval(runId, step.id, decision);
-
           if (!decision.approved) {
             await stepStatus(step.id, "blocked");
-            await log("APPROVAL_DENIED", decision.note ?? "Human reviewer denied the action", {
-              reviewer: decision.reviewer,
-              stepId: step.id,
-            });
+            await log("APPROVAL_DENIED", decision.note ?? "Human reviewer denied the action", { reviewer: decision.reviewer, stepId: step.id });
             return finish("blocked");
           }
-
           await stepStatus(step.id, "approved");
-          await log("APPROVAL_GRANTED", decision.note ?? "Human reviewer approved the action", {
-            reviewer: decision.reviewer,
-            stepId: step.id,
-          });
+          await log("APPROVAL_GRANTED", decision.note ?? "Human reviewer approved the action", { reviewer: decision.reviewer, stepId: step.id });
         }
+
+        const idempotencyKey = `${runId}:${step.id}`;
+        const claimed = await this.store.claimExecution(idempotencyKey, runId, step.id, now().toISOString());
+        if (!claimed) {
+          await stepStatus(step.id, "blocked");
+          await log("REPLAY_BLOCKED", `Duplicate execution blocked for ${step.id}`, { stepId: step.id, idempotencyKey });
+          return finish("blocked");
+        }
+        await log("EXECUTION_CLAIMED", `Execution claim acquired for ${step.id}`, { stepId: step.id, idempotencyKey });
 
         await stepStatus(step.id, "executing");
         const result = await this.deps.registry.execute(step.tool, step.input);
         await this.store.recordExecution(runId, step.id, result.output);
-        await log("TOOL_EXECUTED", `${step.tool}: ${result.ok ? "ok" : "failed"}`, { stepId: step.id });
-
+        await log("TOOL_EXECUTED", `${step.tool}: ${result.ok ? "ok" : "failed"}`, { stepId: step.id, idempotencyKey });
         if (!result.ok) {
           await stepStatus(step.id, "failed");
           await log("RUN_FAILED", `Tool execution failed for ${step.id}`);
@@ -106,18 +95,12 @@ export class AgentControlPlane {
         await stepStatus(step.id, "executed");
         const verification = await this.deps.verify(step, result.output);
         await this.store.recordVerification(runId, step.id, verification);
-        await log(
-          verification.passed ? "VERIFICATION_PASSED" : "VERIFICATION_FAILED",
-          verification.reason,
-          { stepId: step.id },
-        );
-
+        await log(verification.passed ? "VERIFICATION_PASSED" : "VERIFICATION_FAILED", verification.reason, { stepId: step.id });
         if (!verification.passed) {
           await stepStatus(step.id, "failed");
           await log("RUN_FAILED", `Verification failed for ${step.id}`);
           return finish("failed");
         }
-
         await stepStatus(step.id, "verified");
       }
 
