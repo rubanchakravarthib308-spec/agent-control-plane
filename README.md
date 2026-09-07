@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/rubanchakravarthib308-spec/agent-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/rubanchakravarthib308-spec/agent-control-plane/actions/workflows/ci.yml)
 
-Most AI-agent demos stop at “the model called a tool.” Real systems need more: **risk classification, human approval, deterministic execution boundaries, post-action verification, and an audit trail**.
+Most AI-agent demos stop at “the model called a tool.” Real systems need more: **structured planning, risk classification, human approval, replay protection, deterministic execution boundaries, post-action verification, durable state, and an audit trail**.
 
 This project is a compact reference implementation of that control layer.
 
@@ -17,17 +17,21 @@ The control plane enforces this flow:
 ```text
 Goal
   ↓
-Planner
+Planner / LLM proposal
+  ↓
+Structured plan validation
   ↓
 Risk-aware plan
   ↓
-Human approval for high-risk steps
+Scoped, time-bound human approval for high-risk steps
+  ↓
+Idempotent execution claim
   ↓
 Tool execution
   ↓
 Post-action verification
   ↓
-Audit trail + final status
+Durable audit trail + final status
 ```
 
 ## What makes this different
@@ -36,13 +40,18 @@ This is not a chatbot wrapper. The core engineering idea is separation of author
 
 > **The planner proposes what should happen. The control plane decides what is allowed to happen.**
 
-That distinction creates a safer foundation for agents that interact with real systems.
+A model provider never receives direct execution authority. Model output is validated before it can reach approval, replay protection, tool execution, or verification.
 
 ## What it demonstrates
 
-- Agent planning boundaries
+- Provider-neutral LLM planner interface
+- Strict structured-plan validation
+- Deterministic offline planner for tests and demos
 - Tool registry and controlled execution
 - Risk-aware human-in-the-loop approval
+- Exact approval fingerprints, expiry, and capability scopes
+- Idempotency and replay protection
+- PostgreSQL-backed run, step, execution-claim, and audit persistence
 - Post-action verification
 - Explicit blocked / failed / completed states
 - Audit events for every important decision
@@ -53,25 +62,31 @@ That distinction creates a safer foundation for agents that interact with real s
 ## Architecture
 
 ```text
-Planner / LLM
-     │
-     ▼
-  PlanStep
-     │
-     ├── low / medium risk ───────┐
-     │                            │
-     └── high risk → Human Review│
-                                  ▼
-                           Tool Registry
-                                  │
-                                  ▼
-                             Verification
-                                  │
-                                  ▼
-                              Audit Log
+LLM Provider / Deterministic Planner
+              │
+              ▼
+      Structured Plan Validation
+              │
+              ▼
+           PlanStep
+              │
+              ├── low / medium risk ─────────────┐
+              │                                  │
+              └── high risk → Scoped Approval   │
+                                                 ▼
+                                      Idempotency Claim
+                                                 │
+                                                 ▼
+                                          Tool Registry
+                                                 │
+                                                 ▼
+                                            Verification
+                                                 │
+                                                 ▼
+                                      PostgreSQL / Audit Log
 ```
 
-See the deeper design notes in [`docs/architecture.md`](docs/architecture.md).
+See the deeper design notes in [`docs/architecture.md`](docs/architecture.md) and the planner adapter guide in [`docs/planner-adapters.md`](docs/planner-adapters.md).
 
 ## Demo
 
@@ -81,10 +96,11 @@ Scenario:
 
 1. Draft an outreach message — **low risk**
 2. Send the outreach — **high risk**
-3. Pause for human approval
-4. Execute only if approved
-5. Verify the result
-6. Record the audit trail
+3. Require an exact, expiring, capability-scoped human approval
+4. Acquire an idempotent execution claim
+5. Execute only if all gates pass
+6. Verify the result
+7. Record the audit trail
 
 Run it locally:
 
@@ -94,31 +110,52 @@ npm run check
 npm run demo
 ```
 
-Read the full walkthrough in [`docs/demo.md`](docs/demo.md).
+Read the walkthrough in [`docs/demo.md`](docs/demo.md).
 
-## Example safety behavior
+## Planner adapters
 
-A low-risk read can execute immediately.
+`LLMPlannerAdapter` accepts any provider that implements a small `generate()` interface. The control plane itself is not coupled to a vendor SDK.
 
-A high-risk action such as sending a message must be approved first. If the reviewer denies it, the run stops as `blocked` and the tool is never executed.
+```ts
+const planner = new LLMPlannerAdapter(provider, {
+  availableTools: ["read-record", "send-message"],
+  maxSteps: 10,
+});
+```
 
-If execution succeeds but verification fails, the run ends as `failed` rather than pretending success.
+Malformed JSON, invalid schemas, duplicate step IDs, excessive plans, and unknown tools are rejected **before any tool can execute**.
+
+For CI and local development, `DeterministicPlanner` uses the same validation boundary without requiring a live model.
 
 ## Project structure
 
 ```text
 src/
-  control-plane.ts   # orchestration, approvals, verification, audit
-  tool-registry.ts   # registered execution boundary
-  types.ts           # domain model
-  demo.ts            # deterministic end-to-end example
+  planner.ts              # provider-neutral planner + structured validation
+  control-plane.ts        # orchestration, approvals, replay guard, verification
+  approval-policy.ts      # exact action fingerprints, expiry, capability scopes
+  run-store.ts            # persistence contract
+  memory-run-store.ts     # deterministic in-memory store
+  postgres-run-store.ts   # durable PostgreSQL store
+  tool-registry.ts        # registered execution boundary
+  types.ts                # domain model
+  demo.ts                 # deterministic end-to-end example
+
+migrations/
+  001_run_store.sql
+  002_execution_claims.sql
 
 tests/
   control-plane.test.ts
+  run-store.test.ts
+  replay-protection.test.ts
+  approval-policy.test.ts
+  planner.test.ts
 
 docs/
   architecture.md
   demo.md
+  planner-adapters.md
 
 .github/workflows/
   ci.yml
@@ -126,27 +163,28 @@ docs/
 
 ## Current maturity
 
-**v0.1 — control-plane foundation**
+**v0.2 — guarded agent execution foundation**
 
 Implemented:
 
-- Goal → plan → execute → verify lifecycle
+- Goal → validated plan → execute → verify lifecycle
+- Provider-neutral LLM planner boundary
+- Deterministic test planner
 - Human approval gate for high-risk operations
+- Exact approval fingerprints, expiry, and capability scopes
+- Idempotency and replay protection
+- PostgreSQL-backed run state and append-only audit history
 - Guarded tool registry
-- Structured audit trail
+- Post-action verification
 - Safety-focused tests
 - GitHub Actions CI
 
 Next:
 
-- Durable run state
-- PostgreSQL-backed audit store
-- Idempotency and replay protection
-- Time-bound approvals
-- Tool policies and capability scopes
 - Retry strategy for transient failures
 - OpenTelemetry-style observability
-- Pluggable LLM planner adapter
+- Real provider example package or optional integration
+- Stronger PostgreSQL integration tests
 
 ## Engineering principle
 
