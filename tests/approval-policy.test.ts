@@ -60,4 +60,16 @@ describe("approval policy", () => {
     }, now);
     expect(result).toEqual({ valid: false, reason: "Approval does not grant capability: send-message" });
   });
+
+  it("rejects an approval that grants unrelated capabilities too", () => {
+    const request = approvalRequest(step);
+    const result = validateApproval(request, {
+      approved: true,
+      reviewer: "reviewer-1",
+      fingerprint: request.fingerprint,
+      expiresAt: "2026-09-08T00:10:00.000Z",
+      capabilities: ["send-message", "delete-record"],
+    }, now);
+    expect(result).toEqual({ valid: false, reason: "Approval grants capabilities beyond the exact planned action" });
+  });
 });
