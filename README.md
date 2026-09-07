@@ -2,6 +2,8 @@
 
 > **A production-minded execution layer for AI agents — plan, act, verify, approve.**
 
+[![CI](https://github.com/rubanchakravarthib308-spec/agent-control-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/rubanchakravarthib308-spec/agent-control-plane/actions/workflows/ci.yml)
+
 Most AI-agent demos stop at “the model called a tool.” Real systems need more: **risk classification, human approval, deterministic execution boundaries, post-action verification, and an audit trail**.
 
 This project is a compact reference implementation of that control layer.
@@ -28,6 +30,14 @@ Post-action verification
 Audit trail + final status
 ```
 
+## What makes this different
+
+This is not a chatbot wrapper. The core engineering idea is separation of authority:
+
+> **The planner proposes what should happen. The control plane decides what is allowed to happen.**
+
+That distinction creates a safer foundation for agents that interact with real systems.
+
 ## What it demonstrates
 
 - Agent planning boundaries
@@ -40,11 +50,7 @@ Audit trail + final status
 - Automated tests for safety gates
 - CI validation on pushes and pull requests
 
-## Core idea
-
-The LLM or planner proposes **what should happen**. The control plane decides **what is allowed to happen**.
-
-That separation is deliberate.
+## Architecture
 
 ```text
 Planner / LLM
@@ -64,6 +70,31 @@ Planner / LLM
                                   ▼
                               Audit Log
 ```
+
+See the deeper design notes in [`docs/architecture.md`](docs/architecture.md).
+
+## Demo
+
+The repository includes a deterministic local demo with no API key requirement.
+
+Scenario:
+
+1. Draft an outreach message — **low risk**
+2. Send the outreach — **high risk**
+3. Pause for human approval
+4. Execute only if approved
+5. Verify the result
+6. Record the audit trail
+
+Run it locally:
+
+```bash
+npm install
+npm run check
+npm run demo
+```
+
+Read the full walkthrough in [`docs/demo.md`](docs/demo.md).
 
 ## Example safety behavior
 
@@ -85,21 +116,13 @@ src/
 tests/
   control-plane.test.ts
 
+docs/
+  architecture.md
+  demo.md
+
 .github/workflows/
   ci.yml
 ```
-
-## Run locally
-
-Requirements: Node.js 22+
-
-```bash
-npm install
-npm run check
-npm run demo
-```
-
-The demo intentionally uses deterministic local tools — no API key is required.
 
 ## Current maturity
 
@@ -134,3 +157,7 @@ Next:
 Built by **Ruban Chakravarthi** as a public AI-engineering portfolio project focused on **Agentic AI, safe tool use, human oversight, and production-oriented orchestration**.
 
 This repository is intentionally small enough to understand quickly, but designed around patterns that scale into larger agent systems.
+
+## Open to collaboration
+
+If you're hiring for **AI engineering, agentic systems, LLM applications, workflow automation, or production AI infrastructure**, this project is representative of how I think about building reliable systems around intelligent models.
