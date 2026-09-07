@@ -10,7 +10,7 @@ function registry() {
 }
 
 describe("RunStore lifecycle", () => {
-  it("persists run, step, approval, execution, verification, and audit state", async () => {
+  it("persists run, step, scoped approval, execution, verification, and audit state", async () => {
     const store = new InMemoryRunStore();
     const cp = new AgentControlPlane({
       store,
@@ -24,7 +24,14 @@ describe("RunStore lifecycle", () => {
           risk: "high",
         },
       ],
-      approve: async () => ({ approved: true, reviewer: "human-reviewer", note: "Reviewed exact change" }),
+      approve: async (request) => ({
+        approved: true,
+        reviewer: "human-reviewer",
+        note: "Reviewed exact change",
+        fingerprint: request.fingerprint,
+        expiresAt: "2026-09-08T00:05:00.000Z",
+        capabilities: [request.requiredCapability],
+      }),
       verify: async () => ({ passed: true, reason: "Read-back matched" }),
       now: (() => {
         let tick = 0;
@@ -43,6 +50,7 @@ describe("RunStore lifecycle", () => {
     expect(steps).toHaveLength(1);
     expect(steps[0]?.status).toBe("verified");
     expect(steps[0]?.approval?.approved).toBe(true);
+    expect(steps[0]?.approval?.capabilities).toEqual(["write-record"]);
     expect(steps[0]?.output).toEqual({ version: 2 });
     expect(steps[0]?.verification?.passed).toBe(true);
 
