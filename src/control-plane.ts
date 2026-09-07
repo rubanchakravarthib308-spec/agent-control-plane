@@ -8,12 +8,13 @@ import type {
 } from "./types.js";
 import { approvalRequest, validateApproval } from "./approval-policy.js";
 import { InMemoryRunStore } from "./memory-run-store.js";
+import { runPlanner, type PlannerLike } from "./planner.js";
 import type { RunStore, StepStatus } from "./run-store.js";
 import { ToolRegistry } from "./tool-registry.js";
 
 export interface ControlPlaneDeps {
   registry: ToolRegistry;
-  planner: (goal: AgentGoal) => Promise<PlanStep[]>;
+  planner: PlannerLike;
   verify: (step: PlanStep, output: unknown) => Promise<VerificationResult>;
   approve: (request: ApprovalRequest) => Promise<ApprovalDecision>;
   store?: RunStore;
@@ -56,7 +57,7 @@ export class AgentControlPlane {
     await log("GOAL_RECEIVED", goal.objective, { goalId: goal.id, runId });
 
     try {
-      const plan = await this.deps.planner(goal);
+      const plan = await runPlanner(this.deps.planner, goal);
       await this.store.savePlan(runId, plan);
       await log("PLAN_CREATED", `${plan.length} step(s) planned`);
 
