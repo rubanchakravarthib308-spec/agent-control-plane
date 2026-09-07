@@ -5,6 +5,7 @@ export class InMemoryRunStore implements RunStore {
   private readonly runs = new Map<string, RunRecord>();
   private readonly steps = new Map<string, StepRecord[]>();
   private readonly audit = new Map<string, AuditEvent[]>();
+  private readonly executionClaims = new Set<string>();
 
   async createRun(run: RunRecord): Promise<void> {
     if (this.runs.has(run.id)) throw new Error(`Run already exists: ${run.id}`);
@@ -27,6 +28,14 @@ export class InMemoryRunStore implements RunStore {
 
   async recordApproval(runId: string, stepId: string, approval: ApprovalDecision): Promise<void> {
     this.step(runId, stepId).approval = structuredClone(approval);
+  }
+
+  async claimExecution(idempotencyKey: string, runId: string, stepId: string): Promise<boolean> {
+    this.assertRun(runId);
+    this.step(runId, stepId);
+    if (this.executionClaims.has(idempotencyKey)) return false;
+    this.executionClaims.add(idempotencyKey);
+    return true;
   }
 
   async recordExecution(runId: string, stepId: string, output: unknown): Promise<void> {
