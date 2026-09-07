@@ -30,7 +30,7 @@ export class InMemoryRunStore implements RunStore {
     this.step(runId, stepId).approval = structuredClone(approval);
   }
 
-  async claimExecution(idempotencyKey: string, runId: string, stepId: string): Promise<boolean> {
+  async claimExecution(idempotencyKey: string, runId: string, stepId: string, _claimedAt: string): Promise<boolean> {
     this.assertRun(runId);
     this.step(runId, stepId);
     if (this.executionClaims.has(idempotencyKey)) return false;
