@@ -1,6 +1,6 @@
 {
   "name": "agent-control-plane",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "A production-minded execution control plane for AI agents: plan, act, verify, approve.",
   "type": "module",
@@ -14,6 +14,7 @@
     "check": "npm run build && npm test"
   },
   "dependencies": {
+    "postgres": "^3.4.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
