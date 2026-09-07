@@ -52,6 +52,7 @@ describe("RunStore lifecycle", () => {
       "PLAN_CREATED",
       "APPROVAL_REQUESTED",
       "APPROVAL_GRANTED",
+      "EXECUTION_CLAIMED",
       "TOOL_EXECUTED",
       "VERIFICATION_PASSED",
       "RUN_COMPLETED",
