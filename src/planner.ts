@@ -23,7 +23,7 @@ const PlanSchema = z.array(PlanStepSchema).min(1).max(50).superRefine((steps, ct
   }
 });
 
-const ModelEnvelopeSchema = z.object({ steps: z.unknown() }).strict();
+const ModelEnvelopeSchema = z.object({ steps: z.array(z.unknown()) }).strict();
 
 export class PlanValidationError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -117,7 +117,7 @@ export class LLMPlannerAdapter implements Planner {
     return plan;
   }
 
-  private parseEnvelope(raw: unknown): { steps: unknown } {
+  private parseEnvelope(raw: unknown): { steps: unknown[] } {
     let candidate = raw;
     if (typeof raw === "string") {
       try {
@@ -129,7 +129,7 @@ export class LLMPlannerAdapter implements Planner {
 
     const parsed = ModelEnvelopeSchema.safeParse(candidate);
     if (!parsed.success) {
-      throw new PlanValidationError("Model response must be a JSON object containing only a steps field");
+      throw new PlanValidationError("Model response must be a JSON object containing only a steps array");
     }
     return parsed.data;
   }
